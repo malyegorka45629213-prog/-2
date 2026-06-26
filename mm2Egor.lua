@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════
 --  MM2 Coin Autofarm  ·  [egor745top6]  
---  ПРАВИЛЬНЫЙ ЛИМИТ: 40 (обычный) / 50 (премиум)
+--  С КНОПКОЙ ВЫБОРА ЛИМИТА: 40 / 50 МОНЕТ
 -- ═══════════════════════════════════════════════════════════
 
 -- SERVICES
@@ -11,7 +11,6 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris = game:GetService("Debris")
-local MarketplaceService = game:GetService("MarketplaceService")
 
 -- VARIABLES
 local player = Players.LocalPlayer
@@ -30,45 +29,16 @@ local bagFull = false
 local isKilling = false
 
 -- ════════════════════════════════════════════
---  ОПРЕДЕЛЕНИЕ ЛИМИТА МЕШКА (40 или 50)
+--  ЛИМИТ МЕШКА (ПО УМОЛЧАНИЮ 40)
 -- ════════════════════════════════════════════
-local MAX_BAG = 40 -- по умолчанию 40
+local MAX_BAG = 40
+local BAG_OPTIONS = {40, 50}
 
-local function checkBagLimit()
-    -- Проверяем есть ли у игрока премиум (Gamepass)
-    local hasPremium = false
-    
-    -- Способ 1: Проверка через MembershipType
-    if player.MembershipType == Enum.MembershipType.Premium then
-        hasPremium = true
-    end
-    
-    -- Способ 2: Проверка через Gamepass (если есть)
-    local gamepassId = 123456789 -- ID геймпасса (замени на актуальный)
-    local success, hasPass = pcall(function()
-        return MarketplaceService:UserOwnsGamePassAsync(player.UserId, gamepassId)
-    end)
-    if success and hasPass then
-        hasPremium = true
-    end
-    
-    -- Способ 3: Проверка через наличие "Elite" в имени или тегах
-    if player:FindFirstChild("Elite") or player:FindFirstChild("Premium") then
-        hasPremium = true
-    end
-    
-    -- Устанавливаем лимит
-    if hasPremium then
-        MAX_BAG = 50
-    else
-        MAX_BAG = 40
-    end
-    
-    return MAX_BAG
+local function setBagLimit(value)
+    MAX_BAG = value
+    updateBagUI()
+    print("📦 Лимит мешка изменён на:", MAX_BAG)
 end
-
--- Проверяем при старте
-checkBagLimit()
 
 -- Проверка роли
 local function checkRole()
@@ -83,13 +53,6 @@ player.CharacterAdded:Connect(function(char)
     visitedPositions = {}
     wait(0.5)
     checkRole()
-    checkBagLimit()
-end)
-
--- Обновляем лимит при изменении статуса игрока
-player:GetPropertyChangedSignal("MembershipType"):Connect(function()
-    checkBagLimit()
-    updateBagUI()
 end)
 
 -- ─────────────────────────────────────────────
@@ -162,8 +125,8 @@ deathSound.Volume = 0.6
 deathSound.Parent = gui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 340, 0, 480)
-frame.Position = UDim2.new(0.5, -170, 0.5, -240)
+frame.Size = UDim2.new(0, 340, 0, 520)
+frame.Position = UDim2.new(0.5, -170, 0.5, -260)
 frame.BackgroundColor3 = COL.bg
 frame.BorderSizePixel = 0
 frame.ClipsDescendants = true
@@ -400,6 +363,81 @@ local function sectionLabel(order, text)
     return l
 end
 
+-- ── КНОПКА ДЛЯ ВЫБОРА ЛИМИТА ──
+local function limitButton(order)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 44)
+    card.BackgroundColor3 = COL.card
+    card.BorderSizePixel = 0
+    card.LayoutOrder = order
+    card.ZIndex = 2
+    card.Parent = body
+    corner(card, 10)
+    stroke(card, COL.border, 1)
+
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(0.6, 0, 1, 0)
+    t.Position = UDim2.new(0, 14, 0, 0)
+    t.BackgroundTransparency = 1
+    t.Text = "Bag Limit:"
+    t.TextColor3 = COL.text
+    t.Font = Enum.Font.GothamSemibold
+    t.TextSize = 14
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.ZIndex = 2
+    t.Parent = card
+
+    local pill = Instance.new("Frame")
+    pill.Size = UDim2.new(0, 72, 0, 30)
+    pill.Position = UDim2.new(0.75, 0, 0.5, -15)
+    pill.BackgroundColor3 = ACCENT.base
+    pill.BorderSizePixel = 0
+    pill.ZIndex = 2
+    pill.Parent = card
+    corner(pill, 8)
+    stroke(pill, ACCENT.light, 1)
+
+    local pillLabel = Instance.new("TextLabel")
+    pillLabel.Size = UDim2.new(1, 0, 1, 0)
+    pillLabel.BackgroundTransparency = 1
+    pillLabel.Text = tostring(MAX_BAG) .. " 🪙"
+    pillLabel.TextColor3 = COL.white
+    pillLabel.Font = Enum.Font.GothamBold
+    pillLabel.TextSize = 14
+    pillLabel.ZIndex = 2
+    pillLabel.Parent = pill
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.ZIndex = 3
+    btn.Parent = card
+
+    btn.MouseButton1Click:Connect(function()
+        -- Переключаем лимит
+        if MAX_BAG == 40 then
+            setBagLimit(50)
+        else
+            setBagLimit(40)
+        end
+        pillLabel.Text = tostring(MAX_BAG) .. " 🪙"
+        
+        -- Анимация
+        tw(pill, {Size = UDim2.new(0, 80, 0, 34)}, 0.1)
+        task.wait(0.1)
+        tw(pill, {Size = UDim2.new(0, 72, 0, 30)}, 0.1)
+        
+        game.StarterGui:SetCore("SendNotification", {
+            Title = "📦 Лимит изменён",
+            Text = "Теперь: " .. tostring(MAX_BAG) .. " монет",
+            Duration = 2
+        })
+    end)
+
+    return card
+end
+
 -- controls
 local farmBtn, farmSet = toggleCard(1, "Auto Farm")
 local afkBtn,  afkSet  = toggleCard(2, "Anti-AFK")
@@ -467,19 +505,12 @@ local rateVal    = statRow(7, "Coins / Hour")
 sectionLabel(8, "ROLE INFO")
 local roleVal = statRow(9, "Your Role")
 
--- bag status (показывает лимит)
+-- bag status
 sectionLabel(10, "BAG STATUS")
 local bagVal = statRow(11, "Bag Full")
-local limitVal = statRow(12, "Bag Limit")
 
--- Обновление UI для лимита
-local function updateBagUI()
-    bagVal.Text = bagFull and "✅ FULL" or "❌ Empty"
-    bagVal.TextColor3 = bagFull and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(100, 100, 100)
-    limitVal.Text = tostring(MAX_BAG) .. " coins"
-    limitVal.TextColor3 = ACCENT.light
-end
-updateBagUI()
+-- КНОПКА ЛИМИТА (вместо статичной строки)
+limitButton(12)
 
 -- reset
 local resetBtn = Instance.new("TextButton")
@@ -512,6 +543,12 @@ local function updateRoleUI()
     end
 end
 updateRoleUI()
+
+local function updateBagUI()
+    bagVal.Text = bagFull and "✅ FULL" or "❌ Empty"
+    bagVal.TextColor3 = bagFull and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(100, 100, 100)
+end
+updateBagUI()
 
 -- ─────────────────────────────────────────────
 --  КНОПКА ДЛЯ ПЛАНШЕТА (💎)
@@ -771,7 +808,6 @@ farmBtn.MouseButton1Click:Connect(function()
         visitedPositions = {}
         bagFull = false
         counterVal.Text = "0"
-        checkBagLimit()
         updateRoleUI()
         updateBagUI()
         
@@ -843,5 +879,5 @@ end)
 
 print("✅ [egor745top6] Coin Farm loaded!")
 print("📱 Планшет: кнопка 💎 в левом нижнем углу")
-print("🎒 Лимит мешка:", MAX_BAG, "монет")
+print("🎒 Лимит мешка:", MAX_BAG, "монет (нажми кнопку Bag Limit чтобы сменить)")
 print("🎯 Role:", isMurderer and "Murderer" or isSheriff and "Sheriff" or "Innocent")

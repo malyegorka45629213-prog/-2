@@ -1,651 +1,847 @@
---[[
-    ██████  MM2 ULTIMATE SCRIPT by BRO  ██████
-    Управление: [INSERT] - Открыть/Закрыть меню
-    Версия: 3.0 (Полный функционал)
---]]
+-- ═══════════════════════════════════════════════════════════
+--  MM2 Coin Autofarm  ·  [egor745top6]  
+--  ПРАВИЛЬНЫЙ ЛИМИТ: 40 (обычный) / 50 (премиум)
+-- ═══════════════════════════════════════════════════════════
 
-local Player = game.Players.LocalPlayer
-local Mouse = Player:GetMouse()
-local Camera = workspace.CurrentCamera
+-- SERVICES
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
+local MarketplaceService = game:GetService("MarketplaceService")
 
--- ============================================================
---  НАСТРОЙКИ ПО УМОЛЧАНИЮ
--- ============================================================
-local Settings = {
-    -- ESP
-    ESP = true,
-    ESP_Team = true,
-    ESP_Box = true,
-    ESP_Tracer = false,
-    ESP_Health = false,
-    ESP_Distance = true,
-    
-    -- Aimbot
-    Aimbot = true,
-    Aimbot_FOV = 150,
-    Aimbot_Smooth = 0.3,
-    Aimbot_Part = "Head",
-    Aimbot_Visible = false,
-    Aimbot_TeamCheck = true,
-    Aimbot_TriggerBot = false,
-    
-    -- Silent Aim
-    SilentAim = false,
-    
-    -- Auto
-    Auto_ShootMurderer = false,
-    Auto_DodgeKnife = false,
-    Auto_CollectCoins = false,
-    Auto_CollectGifts = false,
-    Auto_Run = false,
-    
-    -- Teleport
-    Teleport_ToGun = false,
-    Teleport_ToKnife = false,
-    Teleport_ToCoins = false,
-    
-    -- Visuals
-    Chams = false,
-    NoFog = false,
-    Brightness = 1,
-    
-    -- Misc
-    AntiAFK = true,
-    NoClip = false,
-    Speed = 16,
-    JumpPower = 50,
-    Walkspeed = 16,
-}
+-- VARIABLES
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
 
--- ============================================================
---  СОЗДАНИЕ GUI МЕНЮ
--- ============================================================
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "MM2UltimateMenu"
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ResetOnSpawn = false
+local visitedPositions = {}
+local isActive = false
+local flySpeed = 15
+local collected = 0
+local startTime = 0
+local antiAFK = false
+local isMurderer = false
+local isSheriff = false
+local bagFull = false
+local isKilling = false
 
--- Главное окно
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 500, 0, 450)
-MainFrame.Position = UDim2.new(0.5, -250, 0.5, -225)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-MainFrame.BackgroundTransparency = 0.15
-MainFrame.BorderSizePixel = 2
-MainFrame.BorderColor3 = Color3.fromRGB(255, 50, 50)
-MainFrame.ClipsDescendants = true
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.Visible = false
-MainFrame.Parent = ScreenGui
+-- ════════════════════════════════════════════
+--  ОПРЕДЕЛЕНИЕ ЛИМИТА МЕШКА (40 или 50)
+-- ════════════════════════════════════════════
+local MAX_BAG = 40 -- по умолчанию 40
 
--- Заголовок
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Position = UDim2.new(0, 0, 0, 0)
-Title.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-Title.BackgroundTransparency = 0.5
-Title.BorderSizePixel = 0
-Title.Text = "🔥 MM2 ULTIMATE MENU 🔥"
-Title.TextColor3 = Color3.fromRGB(255, 50, 50)
-Title.TextScaled = true
-Title.Font = Enum.Font.GothamBold
-Title.Parent = MainFrame
+local function checkBagLimit()
+    -- Проверяем есть ли у игрока премиум (Gamepass)
+    local hasPremium = false
+    
+    -- Способ 1: Проверка через MembershipType
+    if player.MembershipType == Enum.MembershipType.Premium then
+        hasPremium = true
+    end
+    
+    -- Способ 2: Проверка через Gamepass (если есть)
+    local gamepassId = 123456789 -- ID геймпасса (замени на актуальный)
+    local success, hasPass = pcall(function()
+        return MarketplaceService:UserOwnsGamePassAsync(player.UserId, gamepassId)
+    end)
+    if success and hasPass then
+        hasPremium = true
+    end
+    
+    -- Способ 3: Проверка через наличие "Elite" в имени или тегах
+    if player:FindFirstChild("Elite") or player:FindFirstChild("Premium") then
+        hasPremium = true
+    end
+    
+    -- Устанавливаем лимит
+    if hasPremium then
+        MAX_BAG = 50
+    else
+        MAX_BAG = 40
+    end
+    
+    return MAX_BAG
+end
 
--- Кнопка закрытия
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 30, 0, 30)
-CloseBtn.Position = UDim2.new(1, -35, 0, 5)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-CloseBtn.Text = "X"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.TextScaled = true
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.BorderSizePixel = 0
-CloseBtn.Parent = MainFrame
-CloseBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = false
+-- Проверяем при старте
+checkBagLimit()
+
+-- Проверка роли
+local function checkRole()
+    isMurderer = player:FindFirstChild("Murderer") ~= nil
+    isSheriff = player:FindFirstChild("Sheriff") ~= nil
+end
+checkRole()
+
+player.CharacterAdded:Connect(function(char)
+    character = char
+    rootPart = char:WaitForChild("HumanoidRootPart")
+    visitedPositions = {}
+    wait(0.5)
+    checkRole()
+    checkBagLimit()
 end)
 
--- Вкладки
-local TabBar = Instance.new("Frame")
-TabBar.Size = UDim2.new(1, 0, 0, 30)
-TabBar.Position = UDim2.new(0, 0, 0, 40)
-TabBar.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-TabBar.BackgroundTransparency = 0.3
-TabBar.BorderSizePixel = 0
-TabBar.Parent = MainFrame
+-- Обновляем лимит при изменении статуса игрока
+player:GetPropertyChangedSignal("MembershipType"):Connect(function()
+    checkBagLimit()
+    updateBagUI()
+end)
 
--- Контент вкладок
-local TabContent = Instance.new("Frame")
-TabContent.Size = UDim2.new(1, -10, 1, -90)
-TabContent.Position = UDim2.new(0, 5, 0, 75)
-TabContent.BackgroundTransparency = 1
-TabContent.Parent = MainFrame
+-- ─────────────────────────────────────────────
+--  THEME + HELPERS (PURPLE THEME)
+-- ─────────────────────────────────────────────
+local COL = {
+    bg      = Color3.fromRGB(15, 10, 25),
+    card    = Color3.fromRGB(28, 18, 45),
+    cardHov = Color3.fromRGB(38, 25, 60),
+    off     = Color3.fromRGB(40, 30, 55),
+    border  = Color3.fromRGB(60, 40, 80),
+    text    = Color3.fromRGB(230, 220, 245),
+    muted   = Color3.fromRGB(140, 120, 170),
+    white   = Color3.fromRGB(255, 255, 255),
+}
+local ACCENT = {
+    base  = Color3.fromRGB(155, 60, 255),
+    dim   = Color3.fromRGB(60, 20, 100),
+    light = Color3.fromRGB(200, 140, 255),
+}
 
--- Список вкладок
-local Tabs = {}
-local CurrentTab = 1
-
-local TabNames = {"⚔️ Combat", "👁️ ESP", "🚀 Teleport", "⚡ Auto", "🎨 Visuals", "🛠️ Misc"}
-
-for i, name in ipairs(TabNames) do
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 80, 1, 0)
-    btn.Position = UDim2.new(0, (i-1)*80, 0, 0)
-    btn.BackgroundTransparency = 0.8
-    btn.Text = name
-    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    btn.TextScaled = true
-    btn.Font = Enum.Font.GothamSemibold
-    btn.BorderSizePixel = 0
-    btn.Parent = TabBar
-    
-    btn.MouseButton1Click:Connect(function()
-        CurrentTab = i
-        for _, v in pairs(TabContent:GetChildren()) do v:Destroy() end
-        SetupTab(i)
-    end)
+local function corner(obj, r)
+    local c = Instance.new("UICorner", obj)
+    c.CornerRadius = UDim.new(0, r)
+    return c
 end
 
--- ============================================================
---  ФУНКЦИИ ДЛЯ СОЗДАНИЯ ЭЛЕМЕНТОВ GUI
--- ============================================================
-local function CreateToggle(parent, text, y, setting, desc)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 30)
-    frame.Position = UDim2.new(0, 0, 0, y)
-    frame.BackgroundTransparency = 1
-    frame.Parent = parent
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.7, 0, 1, 0)
-    label.Position = UDim2.new(0, 5, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.fromRGB(220, 220, 220)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextSize = 14
-    label.Font = Enum.Font.Gotham
-    label.Parent = frame
-    
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 60, 0, 25)
-    btn.Position = UDim2.new(0.8, 0, 0, 2.5)
-    btn.BackgroundColor3 = Settings[setting] and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
-    btn.Text = Settings[setting] and "ON" or "OFF"
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.TextScaled = true
-    btn.Font = Enum.Font.GothamBold
-    btn.BorderSizePixel = 1
-    btn.BorderColor3 = Color3.fromRGB(50, 50, 50)
-    btn.Parent = frame
-    
-    btn.MouseButton1Click:Connect(function()
-        Settings[setting] = not Settings[setting]
-        btn.BackgroundColor3 = Settings[setting] and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
-        btn.Text = Settings[setting] and "ON" or "OFF"
-    end)
-    
-    return frame
+local function stroke(obj, color, th)
+    local s = Instance.new("UIStroke", obj)
+    s.Color = color
+    s.Thickness = th or 1
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    return s
 end
 
-local function CreateButton(parent, text, y, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.9, 0, 0, 30)
-    btn.Position = UDim2.new(0.05, 0, 0, y)
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
-    btn.Text = text
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.TextScaled = true
-    btn.Font = Enum.Font.GothamBold
-    btn.BorderSizePixel = 1
-    btn.BorderColor3 = Color3.fromRGB(100, 100, 150)
-    btn.Parent = parent
-    
-    btn.MouseButton1Click:Connect(callback)
-    return btn
+local function tw(obj, props, t, style)
+    TweenService:Create(obj, TweenInfo.new(t or 0.2, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
 end
 
-local function CreateSlider(parent, text, y, setting, min, max, desc)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 30)
-    frame.Position = UDim2.new(0, 0, 0, y)
-    frame.BackgroundTransparency = 1
-    frame.Parent = parent
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.5, 0, 1, 0)
-    label.Position = UDim2.new(0, 5, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text .. ": " .. tostring(Settings[setting])
-    label.TextColor3 = Color3.fromRGB(220, 220, 220)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextSize = 14
-    label.Font = Enum.Font.Gotham
-    label.Parent = frame
-    
-    local slider = Instance.new("Frame")
-    slider.Size = UDim2.new(0.4, 0, 0.6, 0)
-    slider.Position = UDim2.new(0.55, 0, 0.2, 0)
-    slider.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
-    slider.BorderSizePixel = 0
-    slider.Parent = frame
-    
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new((Settings[setting] - min) / (max - min), 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-    fill.BorderSizePixel = 0
-    fill.Parent = slider
-    
-    local dragging = false
-    slider.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+-- clean up
+do
+    local pg = player:WaitForChild("PlayerGui")
+    local old = pg:FindFirstChild("AutoFarmGui")
+    if old then old:Destroy() end
+end
+
+-- ─────────────────────────────────────────────
+--  WINDOW
+-- ─────────────────────────────────────────────
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoFarmGui"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.IgnoreGuiInset = true
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local collectSound = Instance.new("Sound")
+collectSound.SoundId = "rbxassetid://12221967"
+collectSound.Volume = 1
+collectSound.Parent = gui
+
+local killSound = Instance.new("Sound")
+killSound.SoundId = "rbxassetid://9120392731"
+killSound.Volume = 0.8
+killSound.Parent = gui
+
+local deathSound = Instance.new("Sound")
+deathSound.SoundId = "rbxassetid://9120392731"
+deathSound.Volume = 0.6
+deathSound.Parent = gui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 340, 0, 480)
+frame.Position = UDim2.new(0.5, -170, 0.5, -240)
+frame.BackgroundColor3 = COL.bg
+frame.BorderSizePixel = 0
+frame.ClipsDescendants = true
+frame.Parent = gui
+corner(frame, 14)
+stroke(frame, COL.border, 1.5)
+
+-- top glow (PURPLE)
+local topGlow = Instance.new("Frame")
+topGlow.Size = UDim2.new(1, 0, 0, 64)
+topGlow.BackgroundColor3 = ACCENT.base
+topGlow.BorderSizePixel = 0
+topGlow.ZIndex = 0
+topGlow.Parent = frame
+corner(topGlow, 14)
+do
+    local g = Instance.new("UIGradient", topGlow)
+    g.Rotation = 90
+    g.Color = ColorSequence.new(ACCENT.base, COL.bg)
+    g.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.82),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+end
+
+-- title bar
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 42)
+titleBar.BackgroundTransparency = 1
+titleBar.Active = true
+titleBar.ZIndex = 2
+titleBar.Parent = frame
+
+local dotColors = {Color3.fromRGB(255, 95, 86), Color3.fromRGB(255, 189, 46), Color3.fromRGB(39, 201, 63)}
+local redDot
+for i = 1, 3 do
+    local d = Instance.new("Frame")
+    d.Size = UDim2.new(0, 12, 0, 12)
+    d.Position = UDim2.new(0, 14 + (i - 1) * 20, 0, 15)
+    d.BackgroundColor3 = dotColors[i]
+    d.BorderSizePixel = 0
+    d.ZIndex = 3
+    d.Parent = titleBar
+    corner(d, 6)
+    if i == 1 then redDot = d end
+end
+
+local titleLbl = Instance.new("TextLabel")
+titleLbl.Size = UDim2.new(1, -98, 1, 0)
+titleLbl.Position = UDim2.new(0, 84, 0, 0)
+titleLbl.BackgroundTransparency = 1
+titleLbl.Text = "[egor745top6] Coin Farm"
+titleLbl.TextColor3 = COL.text
+titleLbl.Font = Enum.Font.GothamBold
+titleLbl.TextSize = 14
+titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+titleLbl.ZIndex = 2
+titleLbl.Parent = titleBar
+
+local sep = Instance.new("Frame")
+sep.Size = UDim2.new(1, -28, 0, 1)
+sep.Position = UDim2.new(0, 14, 0, 42)
+sep.BackgroundColor3 = COL.border
+sep.BorderSizePixel = 0
+sep.ZIndex = 2
+sep.Parent = frame
+
+-- drag
+do
+    local dragging, dragStart, startPos = false, nil, nil
+    titleBar.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
             dragging = true
+            dragStart = i.Position
+            startPos = frame.Position
         end
     end)
-    slider.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    UserInputService.InputChanged:Connect(function(i)
+        if not dragging then return end
+        if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then
+            local delta = i.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
     end)
-    slider.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local pos = math.clamp((input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X, 0, 1)
-            local val = math.round(min + (max - min) * pos)
-            Settings[setting] = val
-            fill.Size = UDim2.new(pos, 0, 1, 0)
-            label.Text = text .. ": " .. tostring(val)
-        end
-    end)
-    
-    return frame
 end
 
--- ============================================================
---  НАСТРОЙКА ВКЛАДОК
--- ============================================================
-function SetupTab(tab)
-    local y = 5
-    local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(1, 0, 1, 0)
-    scroll.BackgroundTransparency = 1
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 500)
-    scroll.ScrollBarThickness = 5
-    scroll.Parent = TabContent
-    
-    if tab == 1 then -- COMBAT
-        CreateToggle(scroll, "🔫 Aimbot (автонаведение)", y, "Aimbot")
-        y = y + 35
-        CreateSlider(scroll, "FOV (радиус)", y, "Aimbot_FOV", 50, 300)
-        y = y + 35
-        CreateSlider(scroll, "Smooth (плавность)", y, "Aimbot_Smooth", 0.1, 1)
-        y = y + 35
-        CreateToggle(scroll, "🎯 Silent Aim (невидимый аим)", y, "SilentAim")
-        y = y + 35
-        CreateToggle(scroll, "🔫 TriggerBot (авто-выстрел)", y, "Aimbot_TriggerBot")
-        y = y + 35
-        CreateToggle(scroll, "👥 Team Check (не стрелять в своих)", y, "Aimbot_TeamCheck")
-        y = y + 35
-        
-        CreateButton(scroll, "💀 УБИТЬ ВСЕХ (Murderer Kill All)", y, function()
-            for _, v in pairs(game.Players:GetPlayers()) do
-                if v ~= Player and v.Character and v.Character:FindFirstChild("Humanoid") then
-                    v.Character.Humanoid.Health = 0
-                end
-            end
-            game.StarterGui:SetCore("SendNotification", {Title = "MM2", Text = "☠️ Все убиты!", Duration = 2})
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🗡️ Убить Murderer'а", y, function()
-            for _, v in pairs(game.Players:GetPlayers()) do
-                if v ~= Player and v:FindFirstChild("Murderer") and v.Character then
-                    v.Character.Humanoid.Health = 0
-                end
-            end
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "⭐ Убить Sheriff'а", y, function()
-            for _, v in pairs(game.Players:GetPlayers()) do
-                if v ~= Player and v:FindFirstChild("Sheriff") and v.Character then
-                    v.Character.Humanoid.Health = 0
-                end
-            end
-        end)
-        y = y + 35
-        
-    elseif tab == 2 then -- ESP
-        CreateToggle(scroll, "👁️ ESP (включить)", y, "ESP")
-        y = y + 35
-        CreateToggle(scroll, "📦 Box ESP (рамка)", y, "ESP_Box")
-        y = y + 35
-        CreateToggle(scroll, "📏 Distance ESP (дистанция)", y, "ESP_Distance")
-        y = y + 35
-        CreateToggle(scroll, "🔗 Tracer (линия к цели)", y, "ESP_Tracer")
-        y = y + 35
-        CreateToggle(scroll, "❤️ Health ESP (здоровье)", y, "ESP_Health")
-        y = y + 35
-        CreateToggle(scroll, "👥 Team ESP (показывать своих)", y, "ESP_Team")
-        y = y + 35
-        
-        CreateButton(scroll, "🔄 Обновить ESP", y, function()
-            for _, v in pairs(game.Players:GetPlayers()) do
-                if v ~= Player and v.Character then
-                    -- Пересоздать ESP
-                end
-            end
-        end)
-        
-    elseif tab == 3 then -- TELEPORT
-        CreateButton(scroll, "🔫 ТП к пистолету", y, function()
-            local gun = workspace:FindFirstChild("Gun")
-            if gun then
-                Player.Character.HumanoidRootPart.CFrame = gun.CFrame + Vector3.new(0, 3, 0)
-            end
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🗡️ ТП к ножу", y, function()
-            local knife = workspace:FindFirstChild("Knife")
-            if knife then
-                Player.Character.HumanoidRootPart.CFrame = knife.CFrame + Vector3.new(0, 3, 0)
-            end
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🪙 ТП к монетам", y, function()
-            for _, v in pairs(workspace:GetChildren()) do
-                if v.Name == "Coin" then
-                    Player.Character.HumanoidRootPart.CFrame = v.CFrame + Vector3.new(0, 3, 0)
-                    break
-                end
-            end
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🎁 ТП к подарку", y, function()
-            for _, v in pairs(workspace:GetChildren()) do
-                if v:IsA("Part") and v.Name:lower():find("gift") then
-                    Player.Character.HumanoidRootPart.CFrame = v.CFrame + Vector3.new(0, 3, 0)
-                    break
-                end
-            end
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🎯 ТП к Murderer'у", y, function()
-            for _, v in pairs(game.Players:GetPlayers()) do
-                if v ~= Player and v:FindFirstChild("Murderer") and v.Character then
-                    Player.Character.HumanoidRootPart.CFrame = v.Character.HumanoidRootPart.CFrame + Vector3.new(0, 3, 2)
-                end
-            end
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🎯 ТП к Sheriff'у", y, function()
-            for _, v in pairs(game.Players:GetPlayers()) do
-                if v ~= Player and v:FindFirstChild("Sheriff") and v.Character then
-                    Player.Character.HumanoidRootPart.CFrame = v.Character.HumanoidRootPart.CFrame + Vector3.new(0, 3, 2)
-                end
-            end
-        end)
-        y = y + 35
-        
-    elseif tab == 4 then -- AUTO
-        CreateToggle(scroll, "🔫 Auto-Shoot Murderer", y, "Auto_ShootMurderer")
-        y = y + 35
-        CreateToggle(scroll, "🏃 Auto-Dodge (уклонение)", y, "Auto_DodgeKnife")
-        y = y + 35
-        CreateToggle(scroll, "🪙 Auto-Collect Coins", y, "Auto_CollectCoins")
-        y = y + 35
-        CreateToggle(scroll, "🎁 Auto-Collect Gifts", y, "Auto_CollectGifts")
-        y = y + 35
-        CreateToggle(scroll, "🏃 Auto-Run (бег всегда)", y, "Auto_Run")
-        y = y + 35
-        
-        CreateButton(scroll, "🔄 Перезапустить авто-сбор", y, function()
-            -- Перезапуск
-        end)
-        
-    elseif tab == 5 then -- VISUALS
-        CreateToggle(scroll, "✨ Chams (просветка)", y, "Chams")
-        y = y + 35
-        CreateToggle(scroll, "🌫️ No Fog (туман)", y, "NoFog")
-        y = y + 35
-        CreateSlider(scroll, "☀️ Яркость", y, "Brightness", 0.5, 2)
-        y = y + 35
-        
-        CreateButton(scroll, "🎨 Включить FullBright", y, function()
-            game.Lighting.Brightness = 2
-            game.Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-            game.Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🌙 Сбросить яркость", y, function()
-            game.Lighting.Brightness = 1
-            game.Lighting.OutdoorAmbient = Color3.fromRGB(127, 127, 127)
-            game.Lighting.Ambient = Color3.fromRGB(127, 127, 127)
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🔄 Сброс графики", y, function()
-            game.Lighting:ClearAllChildren()
-        end)
-        
-    elseif tab == 6 then -- MISC
-        CreateToggle(scroll, "⏰ Anti-AFK", y, "AntiAFK")
-        y = y + 35
-        CreateToggle(scroll, "🌀 NoClip (проход сквозь стены)", y, "NoClip")
-        y = y + 35
-        CreateSlider(scroll, "🏃 Скорость", y, "Walkspeed", 10, 200)
-        y = y + 35
-        CreateSlider(scroll, "🦘 Сила прыжка", y, "JumpPower", 50, 300)
-        y = y + 35
-        
-        CreateButton(scroll, "🔄 Перезагрузить игру", y, function()
-            game:Shutdown()
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "📋 Скопировать свой ID", y, function()
-            setclipboard(Player.UserId)
-        end)
-        y = y + 35
-        
-        CreateButton(scroll, "🎯 Спрятать меню (Insert)", y, function()
-            MainFrame.Visible = false
-        end)
+-- body
+local body = Instance.new("Frame")
+body.Size = UDim2.new(1, 0, 1, -42)
+body.Position = UDim2.new(0, 0, 0, 42)
+body.BackgroundTransparency = 1
+body.ZIndex = 2
+body.Parent = frame
+do
+    local p = Instance.new("UIPadding", body)
+    p.PaddingLeft = UDim.new(0, 14)
+    p.PaddingRight = UDim.new(0, 14)
+    p.PaddingTop = UDim.new(0, 8)
+    p.PaddingBottom = UDim.new(0, 8)
+    local l = Instance.new("UIListLayout", body)
+    l.SortOrder = Enum.SortOrder.LayoutOrder
+    l.Padding = UDim.new(0, 8)
+end
+
+-- ─────────────────────────────────────────────
+--  COMPONENT BUILDERS
+-- ─────────────────────────────────────────────
+local function toggleCard(order, label)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 44)
+    card.BackgroundColor3 = COL.card
+    card.BorderSizePixel = 0
+    card.LayoutOrder = order
+    card.ZIndex = 2
+    card.Parent = body
+    corner(card, 10)
+    local cs = stroke(card, COL.border, 1)
+
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(1, -90, 1, 0)
+    t.Position = UDim2.new(0, 14, 0, 0)
+    t.BackgroundTransparency = 1
+    t.Text = label
+    t.TextColor3 = COL.text
+    t.Font = Enum.Font.GothamSemibold
+    t.TextSize = 14
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.ZIndex = 2
+    t.Parent = card
+
+    local pill = Instance.new("Frame")
+    pill.Size = UDim2.new(0, 52, 0, 24)
+    pill.Position = UDim2.new(1, -66, 0.5, -12)
+    pill.BackgroundColor3 = COL.off
+    pill.BorderSizePixel = 0
+    pill.ZIndex = 2
+    pill.Parent = card
+    corner(pill, 12)
+    local ps = stroke(pill, COL.border, 1)
+
+    local pl = Instance.new("TextLabel")
+    pl.Size = UDim2.new(1, 0, 1, 0)
+    pl.BackgroundTransparency = 1
+    pl.Text = "OFF"
+    pl.TextColor3 = COL.muted
+    pl.Font = Enum.Font.GothamBold
+    pl.TextSize = 11
+    pl.ZIndex = 2
+    pl.Parent = pill
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.ZIndex = 3
+    btn.Parent = card
+
+    local function setState(on)
+        if on then
+            tw(card, {BackgroundColor3 = ACCENT.dim})
+            tw(cs, {Color = ACCENT.base})
+            tw(pill, {BackgroundColor3 = ACCENT.base})
+            tw(ps, {Color = ACCENT.base})
+            pl.Text = "ON"
+            tw(pl, {TextColor3 = COL.white})
+        else
+            tw(card, {BackgroundColor3 = COL.card})
+            tw(cs, {Color = COL.border})
+            tw(pill, {BackgroundColor3 = COL.off})
+            tw(ps, {Color = COL.border})
+            pl.Text = "OFF"
+            tw(pl, {TextColor3 = COL.muted})
+        end
+    end
+
+    btn.MouseEnter:Connect(function() if pl.Text == "OFF" then tw(card, {BackgroundColor3 = COL.cardHov}) end end)
+    btn.MouseLeave:Connect(function() if pl.Text == "OFF" then tw(card, {BackgroundColor3 = COL.card}) end end)
+
+    return btn, setState
+end
+
+local function statRow(order, name)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 24)
+    row.BackgroundTransparency = 1
+    row.LayoutOrder = order
+    row.ZIndex = 2
+    row.Parent = body
+
+    local n = Instance.new("TextLabel")
+    n.Size = UDim2.new(0.62, 0, 1, 0)
+    n.Position = UDim2.new(0, 2, 0, 0)
+    n.BackgroundTransparency = 1
+    n.Text = name
+    n.TextColor3 = COL.muted
+    n.Font = Enum.Font.Gotham
+    n.TextSize = 13
+    n.TextXAlignment = Enum.TextXAlignment.Left
+    n.ZIndex = 2
+    n.Parent = row
+
+    local v = Instance.new("TextLabel")
+    v.Size = UDim2.new(0.38, -2, 1, 0)
+    v.Position = UDim2.new(0.62, 0, 0, 0)
+    v.BackgroundTransparency = 1
+    v.Text = "0"
+    v.TextColor3 = ACCENT.light
+    v.Font = Enum.Font.GothamBold
+    v.TextSize = 13
+    v.TextXAlignment = Enum.TextXAlignment.Right
+    v.ZIndex = 2
+    v.Parent = row
+    return v
+end
+
+local function sectionLabel(order, text)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 0, 18)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextColor3 = COL.muted
+    l.Font = Enum.Font.GothamBold
+    l.TextSize = 11
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.LayoutOrder = order
+    l.ZIndex = 2
+    l.Parent = body
+    return l
+end
+
+-- controls
+local farmBtn, farmSet = toggleCard(1, "Auto Farm")
+local afkBtn,  afkSet  = toggleCard(2, "Anti-AFK")
+
+-- speed
+local speedCard = Instance.new("Frame")
+speedCard.Size = UDim2.new(1, 0, 0, 44)
+speedCard.BackgroundColor3 = COL.card
+speedCard.BorderSizePixel = 0
+speedCard.LayoutOrder = 3
+speedCard.ZIndex = 2
+speedCard.Parent = body
+corner(speedCard, 10)
+stroke(speedCard, COL.border, 1)
+do
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(1, -90, 1, 0)
+    t.Position = UDim2.new(0, 14, 0, 0)
+    t.BackgroundTransparency = 1
+    t.Text = "Tween Speed"
+    t.TextColor3 = COL.text
+    t.Font = Enum.Font.GothamSemibold
+    t.TextSize = 14
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.ZIndex = 2
+    t.Parent = speedCard
+end
+
+local speedPillLbl
+do
+    local pill = Instance.new("Frame")
+    pill.Size = UDim2.new(0, 52, 0, 24)
+    pill.Position = UDim2.new(1, -66, 0.5, -12)
+    pill.BackgroundColor3 = ACCENT.dim
+    pill.BorderSizePixel = 0
+    pill.ZIndex = 2
+    pill.Parent = speedCard
+    corner(pill, 12)
+    stroke(pill, ACCENT.base, 1)
+    speedPillLbl = Instance.new("TextLabel")
+    speedPillLbl.Size = UDim2.new(1, 0, 1, 0)
+    speedPillLbl.BackgroundTransparency = 1
+    speedPillLbl.Text = tostring(flySpeed)
+    speedPillLbl.TextColor3 = ACCENT.light
+    speedPillLbl.Font = Enum.Font.GothamBold
+    speedPillLbl.TextSize = 12
+    speedPillLbl.ZIndex = 2
+    speedPillLbl.Parent = pill
+end
+
+local speedBtn = Instance.new("TextButton")
+speedBtn.Size = UDim2.new(1, 0, 1, 0)
+speedBtn.BackgroundTransparency = 1
+speedBtn.Text = ""
+speedBtn.ZIndex = 3
+speedBtn.Parent = speedCard
+
+-- stats
+sectionLabel(4, "STATS")
+local counterVal = statRow(5, "Coins Collected")
+local timerVal   = statRow(6, "Time Active")
+local rateVal    = statRow(7, "Coins / Hour")
+
+-- role info
+sectionLabel(8, "ROLE INFO")
+local roleVal = statRow(9, "Your Role")
+
+-- bag status (показывает лимит)
+sectionLabel(10, "BAG STATUS")
+local bagVal = statRow(11, "Bag Full")
+local limitVal = statRow(12, "Bag Limit")
+
+-- Обновление UI для лимита
+local function updateBagUI()
+    bagVal.Text = bagFull and "✅ FULL" or "❌ Empty"
+    bagVal.TextColor3 = bagFull and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(100, 100, 100)
+    limitVal.Text = tostring(MAX_BAG) .. " coins"
+    limitVal.TextColor3 = ACCENT.light
+end
+updateBagUI()
+
+-- reset
+local resetBtn = Instance.new("TextButton")
+resetBtn.Size = UDim2.new(1, 0, 0, 38)
+resetBtn.BackgroundColor3 = COL.card
+resetBtn.Text = "Reset Counter"
+resetBtn.TextColor3 = COL.text
+resetBtn.Font = Enum.Font.GothamBold
+resetBtn.TextSize = 13
+resetBtn.AutoButtonColor = false
+resetBtn.LayoutOrder = 13
+resetBtn.ZIndex = 2
+resetBtn.Parent = body
+corner(resetBtn, 10)
+stroke(resetBtn, COL.border, 1)
+resetBtn.MouseEnter:Connect(function() tw(resetBtn, {BackgroundColor3 = COL.cardHov}) end)
+resetBtn.MouseLeave:Connect(function() tw(resetBtn, {BackgroundColor3 = COL.card}) end)
+
+local function updateRoleUI()
+    checkRole()
+    if isMurderer then
+        roleVal.Text = "🔪 Murderer"
+        roleVal.TextColor3 = Color3.fromRGB(255, 50, 50)
+    elseif isSheriff then
+        roleVal.Text = "⭐ Sheriff"
+        roleVal.TextColor3 = Color3.fromRGB(50, 150, 255)
+    else
+        roleVal.Text = "👤 Innocent"
+        roleVal.TextColor3 = Color3.fromRGB(50, 255, 50)
     end
 end
+updateRoleUI()
 
--- Первоначальная настройка
-SetupTab(1)
+-- ─────────────────────────────────────────────
+--  КНОПКА ДЛЯ ПЛАНШЕТА (💎)
+-- ─────────────────────────────────────────────
+local menuButton = Instance.new("TextButton")
+menuButton.Size = UDim2.new(0, 65, 0, 65)
+menuButton.Position = UDim2.new(0, 15, 1, -85)
+menuButton.BackgroundColor3 = ACCENT.base
+menuButton.Text = "💎"
+menuButton.TextColor3 = COL.white
+menuButton.TextSize = 28
+menuButton.Font = Enum.Font.GothamBold
+menuButton.ZIndex = 10
+menuButton.Parent = gui
+corner(menuButton, 32)
+stroke(menuButton, ACCENT.light, 2)
 
--- ============================================================
---  ФУНКЦИОНАЛ СКРИПТА (РАБОТА В ФОНЕ)
--- ============================================================
+menuButton.MouseButton1Click:Connect(function()
+    frame.Visible = not frame.Visible
+end)
 
--- Anti-AFK
-if Settings.AntiAFK then
-    game:GetService("Players").LocalPlayer.Idled:Connect(function()
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new())
-    end)
+-- ─────────────────────────────────────────────
+--  КИНЕМАТОГРАФИЧНЫЕ ЭФФЕКТЫ
+-- ─────────────────────────────────────────────
+
+-- ЭФФЕКТ: Убийца достаёт меч и убивает всех
+local function cinematicMurdererKill()
+    if isKilling then return end
+    isKilling = true
+    
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local hum = character:FindFirstChild("Humanoid")
+    if not hrp or not hum then isKilling = false return end
+    
+    local center = Vector3.new(0, 5, 0)
+    local players = Players:GetPlayers()
+    
+    hrp.CFrame = CFrame.new(center)
+    wait(0.3)
+    
+    local sword = Instance.new("Tool")
+    sword.Name = "MurdererSword"
+    sword.TextureId = "rbxassetid://189130411"
+    sword.GripPos = Vector3.new(0, -0.5, 0)
+    sword.Parent = character
+    
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local goal = {CFrame = CFrame.new(center + Vector3.new(0, 8, 0))}
+    TweenService:Create(hrp, tweenInfo, goal):Play()
+    wait(0.5)
+    
+    for _, v in pairs(players) do
+        if v ~= player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            local targetHrp = v.Character.HumanoidRootPart
+            local targetHum = v.Character:FindFirstChild("Humanoid")
+            if targetHum then
+                targetHum.PlatformStand = true
+                targetHum.WalkSpeed = 0
+            end
+            targetHrp.CFrame = CFrame.new(targetHrp.Position, hrp.Position)
+        end
+    end
+    
+    local flash = Instance.new("Part")
+    flash.Size = Vector3.new(50, 50, 50)
+    flash.Position = center
+    flash.Anchored = true
+    flash.CanCollide = false
+    flash.Material = Enum.Material.Neon
+    flash.BrickColor = BrickColor.new("Really black")
+    flash.Transparency = 0.5
+    flash.Parent = workspace
+    Debris:AddItem(flash, 1)
+    
+    local light = Instance.new("PointLight")
+    light.Brightness = 10
+    light.Range = 50
+    light.Color = Color3.fromRGB(155, 60, 255)
+    light.Parent = flash
+    
+    wait(0.3)
+    
+    killSound:Play()
+    for _, v in pairs(players) do
+        if v ~= player and v.Character and v.Character:FindFirstChild("Humanoid") then
+            v.Character.Humanoid.Health = 0
+            local part = Instance.new("Part")
+            part.Size = Vector3.new(3, 3, 3)
+            part.Position = v.Character.HumanoidRootPart.Position
+            part.Anchored = true
+            part.CanCollide = false
+            part.Material = Enum.Material.Neon
+            part.BrickColor = BrickColor.new("Bright red")
+            part.Transparency = 0.3
+            part.Parent = workspace
+            Debris:AddItem(part, 0.5)
+        end
+    end
+    
+    wait(0.5)
+    hrp.CFrame = CFrame.new(center + Vector3.new(0, 0, 0))
+    hum.PlatformStand = true
+    
+    wait(1)
+    sword:Destroy()
+    
+    bagFull = false
+    collected = 0
+    counterVal.Text = "0"
+    updateBagUI()
+    
+    hum.PlatformStand = false
+    isKilling = false
 end
 
--- NoClip + Speed
-RunService.RenderStepped:Connect(function()
-    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
-        local hum = Player.Character.Humanoid
+-- ЭФФЕКТ: Шериф / Мирный умирает
+local function cinematicDeath()
+    if isKilling then return end
+    isKilling = true
+    
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local hum = character:FindFirstChild("Humanoid")
+    if not hrp or not hum then isKilling = false return end
+    
+    local center = Vector3.new(0, 5, 0)
+    hrp.CFrame = CFrame.new(center)
+    wait(0.3)
+    
+    local flash = Instance.new("Part")
+    flash.Size = Vector3.new(20, 20, 20)
+    flash.Position = center
+    flash.Anchored = true
+    flash.CanCollide = false
+    flash.Material = Enum.Material.Neon
+    flash.BrickColor = BrickColor.new("Bright gold")
+    flash.Transparency = 0.5
+    flash.Parent = workspace
+    Debris:AddItem(flash, 1)
+    
+    local light = Instance.new("PointLight")
+    light.Brightness = 15
+    light.Range = 40
+    light.Color = Color3.fromRGB(255, 215, 0)
+    light.Parent = flash
+    
+    deathSound:Play()
+    
+    wait(0.3)
+    hum.Health = 0
+    
+    for i = 1, 20 do
+        local coin = Instance.new("Part")
+        coin.Size = Vector3.new(0.5, 0.1, 0.5)
+        coin.Position = center + Vector3.new(
+            math.random(-5, 5),
+            math.random(0, 10),
+            math.random(-5, 5)
+        )
+        coin.Anchored = false
+        coin.CanCollide = false
+        coin.Material = Enum.Material.Neon
+        coin.BrickColor = BrickColor.new("Bright gold")
+        coin.Parent = workspace
         
-        -- Speed
-        if hum.WalkSpeed ~= Settings.Walkspeed then
-            hum.WalkSpeed = Settings.Walkspeed
-        end
-        if hum.JumpPower ~= Settings.JumpPower then
-            hum.JumpPower = Settings.JumpPower
-        end
+        local bodyVel = Instance.new("BodyVelocity")
+        bodyVel.MaxForce = Vector3.new(4000, 4000, 4000)
+        bodyVel.Velocity = Vector3.new(
+            math.random(-20, 20),
+            math.random(10, 30),
+            math.random(-20, 20)
+        )
+        bodyVel.Parent = coin
         
-        -- NoClip
-        if Settings.NoClip and Player.Character:FindFirstChild("HumanoidRootPart") then
-            for _, part in pairs(Player.Character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
+        Debris:AddItem(coin, 2)
+    end
+    
+    bagFull = false
+    collected = 0
+    counterVal.Text = "0"
+    updateBagUI()
+    
+    isKilling = false
+end
+
+-- ─────────────────────────────────────────────
+--  ANTI-AFK + NOCLIP
+-- ─────────────────────────────────────────────
+afkBtn.MouseButton1Click:Connect(function()
+    antiAFK = not antiAFK
+    afkSet(antiAFK)
+end)
+
+player.Idled:Connect(function()
+    if antiAFK then
+        VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end
+end)
+
+RunService.Stepped:Connect(function()
+    if isActive and character and not isKilling then
+        for _, v in ipairs(character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
             end
         end
     end
 end)
 
--- Auto-Shoot Murderer
-RunService.RenderStepped:Connect(function()
-    if Settings.Auto_ShootMurderer then
-        for _, v in pairs(game.Players:GetPlayers()) do
-            if v ~= Player and v:FindFirstChild("Murderer") and v.Character then
-                local head = v.Character:FindFirstChild("Head")
-                if head then
-                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, head.Position)
-                    -- Имитация выстрела
-                    Mouse1Click()
-                end
-            end
-        end
-    end
+-- ─────────────────────────────────────────────
+--  SPEED CYCLE
+-- ─────────────────────────────────────────────
+speedBtn.MouseButton1Click:Connect(function()
+    flySpeed = flySpeed + 1
+    if flySpeed > 25 then flySpeed = 10 end
+    speedPillLbl.Text = tostring(flySpeed)
 end)
 
--- Auto-Collect Coins
-RunService.RenderStepped:Connect(function()
-    if Settings.Auto_CollectCoins and Player.Character then
-        local hrp = Player.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            for _, coin in pairs(workspace:GetChildren()) do
-                if coin.Name == "Coin" and coin:IsA("BasePart") then
-                    local dist = (hrp.Position - coin.Position).Magnitude
-                    if dist < 50 then
-                        hrp.CFrame = coin.CFrame + Vector3.new(0, 3, 0)
+-- ─────────────────────────────────────────────
+--  FLY TO
+-- ─────────────────────────────────────────────
+local function flyTo(pos, speed)
+    if not rootPart or isKilling then return end
+    local distance = (pos - rootPart.Position).Magnitude
+    local duration = distance / speed
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    local goal = {CFrame = CFrame.new(pos)}
+    local tween = TweenService:Create(rootPart, tweenInfo, goal)
+    tween:Play()
+    tween.Completed:Wait()
+end
+
+-- ─────────────────────────────────────────────
+--  RESET
+-- ─────────────────────────────────────────────
+resetBtn.MouseButton1Click:Connect(function()
+    collected = 0
+    startTime = tick()
+    counterVal.Text = "0"
+    timerVal.Text = "0s"
+    rateVal.Text = "0"
+    bagFull = false
+    updateBagUI()
+end)
+
+-- ─────────────────────────────────────────────
+--  MAIN FARM LOOP
+-- ─────────────────────────────────────────────
+farmBtn.MouseButton1Click:Connect(function()
+    isActive = not isActive
+    farmSet(isActive)
+    
+    if isActive then
+        collected = 0
+        startTime = tick()
+        visitedPositions = {}
+        bagFull = false
+        counterVal.Text = "0"
+        checkBagLimit()
+        updateRoleUI()
+        updateBagUI()
+        
+        task.spawn(function()
+            while isActive do
+                local elapsed = tick() - startTime
+                timerVal.Text = math.floor(elapsed) .. "s"
+                local rate = elapsed > 0 and math.floor((collected / elapsed) * 3600) or 0
+                rateVal.Text = tostring(rate)
+                task.wait(0.1)
+            end
+        end)
+        
+        task.spawn(function()
+            while isActive do
+                if isKilling then 
+                    task.wait(1)
+                    continue 
+                end
+                
+                character = player.Character or player.CharacterAdded:Wait()
+                rootPart = character:FindFirstChild("HumanoidRootPart")
+                if rootPart then
+                    checkRole()
+                    
+                    local closest, shortest = nil, math.huge
+                    for _, obj in ipairs(workspace:GetDescendants()) do
+                        if obj:IsA("BasePart") and obj.Name == "Coin_Server" then
+                            local dist = (obj.Position - rootPart.Position).Magnitude
+                            if dist < shortest and dist < 250 and not visitedPositions[obj] then
+                                closest = obj
+                                shortest = dist
+                            end
+                        end
+                    end
+                    
+                    if closest and closest.Parent and closest:IsDescendantOf(workspace) then
+                        flyTo(closest.Position, flySpeed)
+                        if closest and closest.Parent and closest:IsDescendantOf(workspace) then
+                            visitedPositions[closest] = true
+                            collected = collected + 1
+                            collectSound:Play()
+                            counterVal.Text = tostring(collected)
+                            
+                            -- ═══════════════════════════════════════
+                            --  ПРОВЕРКА ЛИМИТА (40 или 50 монет)
+                            -- ═══════════════════════════════════════
+                            if collected >= MAX_BAG and not bagFull and not isKilling then
+                                bagFull = true
+                                updateBagUI()
+                                
+                                checkRole()
+                                if isMurderer then
+                                    cinematicMurdererKill()
+                                else
+                                    cinematicDeath()
+                                end
+                                bagFull = false
+                                updateBagUI()
+                            end
+                        end
                     end
                 end
-            end
-        end
-    end
-end)
-
--- ESP System (Расширенный)
-local ESPObjects = {}
-
-local function CreateFullESP(plr)
-    if not plr or not plr.Character or not Settings.ESP then return end
-    
-    local head = plr.Character:FindFirstChild("Head")
-    local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-    if not head or not hrp then return end
-    
-    -- Имя
-    local billboard = Instance.new("BillboardGui")
-    billboard.Size = UDim2.new(0, 200, 0, 60)
-    billboard.Adornee = head
-    billboard.AlwaysOnTop = true
-    billboard.MaxDistance = 300
-    billboard.ResetOnSpawn = false
-    
-    local label = Instance.new("TextLabel", billboard)
-    label.Size = UDim2.new(1, 0, 0.5, 0)
-    label.BackgroundTransparency = 1
-    label.TextScaled = true
-    label.Font = Enum.Font.GothamBold
-    
-    -- Определение роли
-    local role = "👤 "
-    local color = Color3.fromRGB(0, 255, 0)
-    if plr:FindFirstChild("Murderer") then
-        role = "🔪 "
-        color = Color3.fromRGB(255, 0, 0)
-    elseif plr:FindFirstChild("Sheriff") then
-        role = "⭐ "
-        color = Color3.fromRGB(0, 150, 255)
-    end
-    
-    label.TextColor3 = color
-    label.Text = role .. plr.Name
-    
-    -- Дистанция
-    if Settings.ESP_Distance then
-        local distLabel = Instance.new("TextLabel", billboard)
-        distLabel.Size = UDim2.new(1, 0, 0.3, 0)
-        distLabel.Position = UDim2.new(0, 0, 0.5, 0)
-        distLabel.BackgroundTransparency = 1
-        distLabel.TextScaled = true
-        distLabel.Font = Enum.Font.Gotham
-        distLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        
-        game:GetService("RunService").RenderStepped:Connect(function()
-            if hrp and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
-                local dist = (hrp.Position - Player.Character.HumanoidRootPart.Position).Magnitude
-                distLabel.Text = string.format("%.1f м", dist)
+                task.wait(0.1)
             end
         end)
     end
-    
-    billboard.Parent = game.CoreGui
-    ESPObjects[plr] = billboard
-    
-    -- Box ESP
-    if Settings.ESP_Box then
-        local box = Instance.new("BoxHandleAdornment")
-        box.Size = Vector3.new(3, 5, 1.5)
-        box.Adornee = hrp
-        box.Color3 = color
-        box.AlwaysOnTop = true
-        box.ZIndex = 10
-        box.Transparency = 0.5
-        box.Parent = hrp
-        table.insert(ESPObjects, box)
-    end
-end
-
--- Обновление ESP
-game.Players.PlayerAdded:Connect(function(plr)
-    plr.CharacterAdded:Connect(function()
-        wait(0.5)
-        if Settings.ESP then
-            CreateFullESP(plr)
-        end
-    end)
 end)
 
--- Запуск ESP
-wait(1)
-for _, plr in pairs(game.Players:GetPlayers()) do
-    if plr ~= Player then
-        CreateFullESP(plr)
-    end
-end
-
--- ============================================================
---  ОТКРЫТИЕ МЕНЮ ПО КНОПКЕ INSERT
--- ============================================================
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Insert then
-        MainFrame.Visible = not MainFrame.Visible
-    end
-end)
-
--- ============================================================
---  УВЕДОМЛЕНИЕ О ЗАГРУЗКЕ
--- ============================================================
-game.StarterGui:SetCore("SendNotification", {
-    Title = "🔥 MM2 ULTIMATE SCRIPT",
-    Text = "Нажми [INSERT] для открытия меню!",
-    Duration = 5
-})
-
-print("✅ MM2 ULTIMATE SCRIPT ЗАГРУЖЕН!")
-print("📌 Нажми INSERT для открытия меню")
+print("✅ [egor745top6] Coin Farm loaded!")
+print("📱 Планшет: кнопка 💎 в левом нижнем углу")
+print("🎒 Лимит мешка:", MAX_BAG, "монет")
+print("🎯 Role:", isMurderer and "Murderer" or isSheriff and "Sheriff" or "Innocent")
